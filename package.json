@@ -1,0 +1,16 @@
+{
+  "name": "ascidrive",
+  "version": "0.1.0",
+  "description": "Endless first-person night drive rendered in pure ASCII in the terminal",
+  "main": "src/scene.js",
+  "bin": {
+    "ascidrive": "bin/drive.js"
+  },
+  "scripts": {
+    "start": "node bin/drive.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT"
+}
