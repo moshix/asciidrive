@@ -4,13 +4,18 @@
   "description": "Endless first-person night drive rendered in pure ASCII in the terminal",
   "main": "src/scene.js",
   "bin": {
-    "ascidrive": "bin/drive.js"
+    "ascidrive": "bin/drive.js",
+    "ascidrive-server": "bin/server.js"
   },
   "scripts": {
-    "start": "node bin/drive.js"
+    "start": "node bin/drive.js",
+    "server": "node bin/server.js"
   },
   "engines": {
     "node": ">=16"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "ssh2": "^1.17.0"
+  }
 }
