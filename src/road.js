@@ -61,7 +61,7 @@ const K = {
   // bends swing them gently across the view, and drift slowly with the wind.
   SKY_TURN: 0.35, // fraction of the car's turning the sky follows (< 1 reads as
   //                 very far away: bends move it gently instead of sweeping it)
-  MOUNTAIN_TURN: 0.1, // same for the mountain range: much less than the clouds
+  MOUNTAIN_TURN: 0.05, // same for the mountain range: much less than the clouds
   MOUNTAIN_HOLD: 0.75, // columns the range's target must drift before it moves
   CLOUDS: 4, // clouds spread over the band of bearings CLOUD_SPAN wide
   CLOUD_SPAN: 3.2, // rad; wider than anything visible, so wrapping is off-screen
@@ -239,18 +239,13 @@ const CLOUD_PUFFS = [
 // horizon, tiled sideways. The last columns slope back down into the first, so
 // tiles join seamlessly.
 const MOUNTAINS = [
-  "                    _._  Ae ,                                                            ",
-  "                    ]_[ A%#V%A                            A\\    .                        ",
-  "            A       ||AV%####A\\    .^. ,A             ,++A#%A.A#A.                       ",
-  "       A+-A#\\       |A#%+' ._._..A%##VA%\\    ._    ,A+'A##%+V###A\\                       ",
-  "      .A%#V%#A`._   A+'    ||||:V%+/A%+`  `.A%#A\\ A+'  A%+'   V#%+/` .   .^.      .      ",
-  "    /A+'      `+'.`+       |||.'\\._._._.    `V%#AV'   :+'       +':   `.A#%+A    / `.    ",
-  "   /+'      .__.'     ._._.|'    \\||||.__.    `VV  .'            /      `.`+%A  /    `.  ",
-  ".-'         |/        ||||/       `.____|       \\._          _.'          \\`+v         `-",
-  "            |'        |^^/           \\^^^|        `.`                       `            ",
-  "                        '             `            .-._                      -           ",
+  "           _A%A_              A\\                   ",
+  "      A   |AV%##A\\  .^.,A   ,++A#%A.A#A.           ",
+  "   .A%#V\\._|A#%+'.A%##VA%\\._,A+'A##%+V##A\\ .^.     ",
+  "  /A+' `+'|||:V%+/A%+` `V%#A+'A%+'  V#%+/`.A#%A/ `.",
+  ".-'   |/  ||/ `.___|    `VV .'     _.'  \\`+v       ",
 ];
-const MOUNTAIN_PEAK = 26; // art column of the highest peak, centred on the road at the start
+const MOUNTAIN_PEAK = 13; // art column of the highest peak, centred on the road at the start
 
 // ------------------------------------------------------------------- track
 // Per-metre curvature samples, generated forever from random sections: a left
