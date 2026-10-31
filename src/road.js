@@ -63,6 +63,7 @@ const K = {
   //                 very far away: bends move it gently instead of sweeping it)
   MOUNTAIN_TURN: 0.05, // same for the mountain range: much less than the clouds
   MOUNTAIN_HOLD: 0.75, // columns the range's target must drift before it moves
+  MOUNTAIN_BAND: 600, // columns before the range repeats (wider than any terminal)
   CLOUDS: 4, // clouds spread over the band of bearings CLOUD_SPAN wide
   CLOUD_SPAN: 3.2, // rad; wider than anything visible, so wrapping is off-screen
   CLOUD_DRIFT: 0.004, // rad/s the clouds drift with the wind (+ = to the right)
@@ -235,17 +236,94 @@ const CLOUD_PUFFS = [
   [1.9, -0.33, 0.42],
 ]
 
-// Mountain range on the horizon: hand-drawn ASCII, bottom row just above the
-// horizon, tiled sideways. The last columns slope back down into the first, so
-// tiles join seamlessly.
-const MOUNTAINS = [
-  "           _A%A_              A\\                   ",
-  "      A   |AV%##A\\  .^.,A   ,++A#%A.A#A.           ",
-  "   .A%#V\\._|A#%+'.A%##VA%\\._,A+'A##%+V##A\\ .^.     ",
-  "  /A+' `+'|||:V%+/A%+` `V%#A+'A%+'  V#%+/`.A#%A/ `.",
-  ".-'   |/  ||/ `.___|    `VV .'     _.'  \\`+v       ",
+// Mountain range on the horizon: hand-drawn ASCII mountains (bottom-aligned,
+// up to MOUNTAIN_ROWS tall). Road builds one long band from them in random
+// order, mirrored at random and with their rock texture shuffled, so no two
+// look alike.
+const MOUNTAIN_ROWS = 5;
+const MOUNTAIN_PIECES = [
+  [
+    '     _A%A_      ',
+    '    /AV%##A\\    ',
+    "   /A#%+' V#\\   ",
+    '  /|||:V%+  `.  ',
+    '_/ ||/ `.___| `-',
+  ],
+  [
+    '   A\\    .A#A.   ',
+    '  ,+A#%A.A#%+V\\  ',
+    " /A%+'  V#%+/` \\ ",
+    "/+'       +':  `.",
+  ],
+  [
+    '   .^.    ',
+    '  .A%#A\\  ',
+    "./`V%#AV'\\.",
+  ],
+  [
+    '    A       ',
+    '  A+-A#\\    ',
+    ' .A%#V%#A`._ ',
+    "/A+'   `+'.`-",
+  ],
+  [
+    '   ._._..A%#A\\    ',
+    '  /||||:V%+/A%+`  ',
+    "_/ |||.'\\._._._.`-",
+  ],
+  [
+    '   .^.     ',
+    '  `.A#%+A   ',
+    ' /  `+%A \\  ',
+    '/     `+v  `.',
+  ],
+  [
+    '    ,A        ',
+    '   / #\\_      ',
+    "  /%V+'%A.    ",
+    " .A+' `%#\\`.  ",
+    "/'  :    `\\ `-",
+  ],
+  [
+    ' .-^-. ',
+    "/  '  \\",
+  ],
 ];
-const MOUNTAIN_PEAK = 13; // art column of the highest peak, centred on the road at the start
+const MIRROR = { '/': '\\', '\\': '/', '`': "'", "'": '`', '(': ')', ')': '(', '[': ']', ']': '[' };
+const ROCK = '#%V+';
+
+// One band of MOUNTAIN_ROWS strings, P columns wide; drawing wraps it.
+function buildMountains(rng, P) {
+  const g = Array.from({ length: MOUNTAIN_ROWS }, () => Array(P).fill(' '));
+  let x = 0;
+  let prev = -1;
+  while (x < P - 4) {
+    let k;
+    do k = Math.floor(rng() * MOUNTAIN_PIECES.length);
+    while (k === prev);
+    prev = k;
+    const w = Math.max(...MOUNTAIN_PIECES[k].map((r) => r.length));
+    let rows = MOUNTAIN_PIECES[k].map((r) => r.padEnd(w));
+    if (rng() < 0.5) rows = rows.map((r) => [...r].reverse().map((c) => MIRROR[c] || c).join(''));
+    const top = MOUNTAIN_ROWS - rows.length;
+    for (let r = 0; r < rows.length; r++) {
+      for (let i = 0; i < w; i++) {
+        let c = rows[r][i];
+        if (c === ' ') continue;
+        if (ROCK.includes(c) && rng() < 0.3) c = ROCK[Math.floor(rng() * ROCK.length)];
+        g[top + r][(x + i) % P] = c;
+      }
+    }
+    x += w - Math.floor(rng() * 3); // neighbours overlap their feet a little
+    if (rng() < 0.3) {
+      // a short stretch of open ground
+      const gap = 1 + Math.floor(rng() * 4);
+      for (let i = 0; i < gap; i++) if (rng() < 0.5) g[MOUNTAIN_ROWS - 1][(x + i) % P] = '_';
+      x += gap;
+    }
+  }
+  return g.map((r) => r.join(''));
+}
 
 // ------------------------------------------------------------------- track
 // Per-metre curvature samples, generated forever from random sections: a left
@@ -378,6 +456,7 @@ class Road {
         flip: crng() < 0.5 ? -1 : 1,
       });
     }
+    this.mountains = buildMountains(mulberry32((seed * 3266489917) ^ 0x27d4eb2f), K.MOUNTAIN_BAND);
     // distant car
     this.car = { active: false, gap: 0, rel: 0, relTarget: 0, timer: 3 + this.rng() * 5 };
     this.track.ensure(K.FAR + 50);
@@ -717,7 +796,8 @@ class Road {
   // Mountains are written straight into the framebuffer before the mask is
   // flushed, so clouds, road and car all draw over them. They pan with the sky.
   _drawMountains(fb) {
-    const P = MOUNTAINS[0].length;
+    const band = this.mountains;
+    const P = band[0].length;
     // Whole-column art can only step a full cell, so it pans slowly and only
     // moves once the target is clearly past the next column (no flip-flopping
     // between two columns while the camera sways).
@@ -725,12 +805,12 @@ class Road {
     if (this.mtnPan === undefined || Math.abs(pan - this.mtnPan) > K.MOUNTAIN_HOLD) {
       this.mtnPan = Math.round(pan);
     }
-    const x0 = Math.round(this.cx / 4) + this.mtnPan - MOUNTAIN_PEAK;
-    const y0 = Math.floor(this.cy / 8) - MOUNTAINS.length;
-    for (let r = 0; r < MOUNTAINS.length; r++) {
+    const x0 = this.mtnPan;
+    const y0 = Math.floor(this.cy / 8) - band.length;
+    for (let r = 0; r < band.length; r++) {
       const y = y0 + r;
       if (y < 0 || y >= this.H) continue;
-      const row = MOUNTAINS[r];
+      const row = band[r];
       for (let x = 0; x < this.W; x++) {
         const ch = row[(((x - x0) % P) + P) % P];
         if (ch !== ' ') fb.cells[y * this.W + x] = ch;
