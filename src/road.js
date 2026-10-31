@@ -61,10 +61,12 @@ const K = {
   // bends swing them gently across the view, and drift slowly with the wind.
   SKY_TURN: 0.35, // fraction of the car's turning the sky follows (< 1 reads as
   //                 very far away: bends move it gently instead of sweeping it)
+  MOUNTAIN_TURN: 0.1, // same for the mountain range: much less than the clouds
+  MOUNTAIN_HOLD: 0.75, // columns the range's target must drift before it moves
   CLOUDS: 4, // clouds spread over the band of bearings CLOUD_SPAN wide
   CLOUD_SPAN: 3.2, // rad; wider than anything visible, so wrapping is off-screen
   CLOUD_DRIFT: 0.004, // rad/s the clouds drift with the wind (+ = to the right)
-  CLOUD_EL: 0.09, // typical elevation of a cloud base (rad)
+  CLOUD_EL: 0.27, // lowest elevation of a cloud base (rad): clear of the mountain peaks
   CLOUD_SIZE: 0.07, // radians per cloud shape unit (before per-cloud scale)
   SKY_STROKE: 1.6, // outline width (sub-pixels)
 
@@ -233,6 +235,23 @@ const CLOUD_PUFFS = [
   [1.9, -0.33, 0.42],
 ]
 
+// Mountain range on the horizon: hand-drawn ASCII, bottom row just above the
+// horizon, tiled sideways. The last columns slope back down into the first, so
+// tiles join seamlessly.
+const MOUNTAINS = [
+  "                    _._  Ae ,                                                            ",
+  "                    ]_[ A%#V%A                            A\\    .                        ",
+  "            A       ||AV%####A\\    .^. ,A             ,++A#%A.A#A.                       ",
+  "       A+-A#\\       |A#%+' ._._..A%##VA%\\    ._    ,A+'A##%+V###A\\                       ",
+  "      .A%#V%#A`._   A+'    ||||:V%+/A%+`  `.A%#A\\ A+'  A%+'   V#%+/` .   .^.      .      ",
+  "    /A+'      `+'.`+       |||.'\\._._._.    `V%#AV'   :+'       +':   `.A#%+A    / `.    ",
+  "   /+'      .__.'     ._._.|'    \\||||.__.    `VV  .'            /      `.`+%A  /    `.  ",
+  ".-'         |/        ||||/       `.____|       \\._          _.'          \\`+v         `-",
+  "            |'        |^^/           \\^^^|        `.`                       `            ",
+  "                        '             `            .-._                      -           ",
+];
+const MOUNTAIN_PEAK = 26; // art column of the highest peak, centred on the road at the start
+
 // ------------------------------------------------------------------- track
 // Per-metre curvature samples, generated forever from random sections: a left
 // bend, a right bend or a straight, each with random length / sharpness.
@@ -359,7 +378,7 @@ class Road {
     for (let i = 0; i < K.CLOUDS; i++) {
       this.clouds.push({
         az: -K.CLOUD_SPAN / 2 + ((i + 0.25 + crng() * 0.5) * K.CLOUD_SPAN) / K.CLOUDS,
-        el: K.CLOUD_EL * (0.75 + crng() * 0.6),
+        el: K.CLOUD_EL * (1 + crng() * 0.2),
         size: K.CLOUD_SIZE * (0.75 + crng() * 0.5),
         flip: crng() < 0.5 ? -1 : 1,
       });
@@ -469,7 +488,10 @@ class Road {
 
     this._buildProfile();
     this._buildVisibility();
-    if (!this.tunnel) this._drawSky();
+    if (!this.tunnel) {
+      this._drawMountains(fb);
+      this._drawSky();
+    }
     this._drawEdges();
     this._drawDashes();
     const sprites = [];
@@ -695,6 +717,30 @@ class Road {
 
   _drawSky() {
     for (const cl of this.clouds) this._drawCloud(cl, K.SKY_STROKE);
+  }
+
+  // Mountains are written straight into the framebuffer before the mask is
+  // flushed, so clouds, road and car all draw over them. They pan with the sky.
+  _drawMountains(fb) {
+    const P = MOUNTAINS[0].length;
+    // Whole-column art can only step a full cell, so it pans slowly and only
+    // moves once the target is clearly past the next column (no flip-flopping
+    // between two columns while the camera sways).
+    const pan = (-(this.heading + this.camYaw) * K.MOUNTAIN_TURN * this.fx) / 4;
+    if (this.mtnPan === undefined || Math.abs(pan - this.mtnPan) > K.MOUNTAIN_HOLD) {
+      this.mtnPan = Math.round(pan);
+    }
+    const x0 = Math.round(this.cx / 4) + this.mtnPan - MOUNTAIN_PEAK;
+    const y0 = Math.floor(this.cy / 8) - MOUNTAINS.length;
+    for (let r = 0; r < MOUNTAINS.length; r++) {
+      const y = y0 + r;
+      if (y < 0 || y >= this.H) continue;
+      const row = MOUNTAINS[r];
+      for (let x = 0; x < this.W; x++) {
+        const ch = row[(((x - x0) % P) + P) % P];
+        if (ch !== ' ') fb.cells[y * this.W + x] = ch;
+      }
+    }
   }
 
   // Cloud: outer outline of a few overlapping puffs over a flat base. The end
